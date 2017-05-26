@@ -1,0 +1,168 @@
+#Genetic Algorithm in Haskell
+#as sudoku solver
+#Author:Cup(CACuppuccino)
+####The author always keeps the copyright of the article and the experiment data
+####This report is part of my school assignment
+In the GA part, I seperate the algorithm into 4 parts:Genetic,CrossOver,RNG and Mutation. Since the scale of the program is large, it is divided into four modules, for the convenience of debugging and logic constructing.  
+Generally, GA is usually conducted as 4 steps: encode, crossover, select and mutation, I will explain my GA algorithm in this order as well.  
+At the same time, all the experiment data results were stored in the **evolution.txt** under the project file.  
+The workflow is as follows:
+![](http://i.imgur.com/1Y9Uv84.jpg)
+####Prepare-RNG
+This part used to be the most difficult section to me, because haskell's purity makes it extremly difficult to generate a real random number, unless using IO function which will bring more difficulties and can't safisfy the demand of continually generates random numbers. Inspired by tutor **Matthew**, I tried to use one of the **pseudorandom** theory:**Linear congruential generator**. The formula is simple and consumes **little memory** to retain the state, it basically suits the need for the GA, but need designers treating the paremeters carefully.
+
+	NewSeed = (A*Seed+B) mod M
+	*:M = range of the random numbers
+
+Adjustment still need to be done to these parameters since it affects the **distribution** of the numbers in the particular range. I pick A=171 and B=71 in all my random number generators(RNG) randomly, since I will adjust A and B to optimise the performance of RNG. By using the **MATLAB**, I found the number distribution is as follows (1000 times result, initial seed is 5):
+![](http://i.imgur.com/6WQLxuU.jpg)  
+This indicates that **LCG** doesn't actually cover all the numbers, but only part of them. I tried A=99 as well and receive a worse result, so parameters affects the result strongly.   
+This also means that GA's performance is not only affected by the design of the program (like most traditional algorithms), but also heavilly depend on the parameter set in the program. 
+![](http://i.imgur.com/aaLNZyq.jpg) 
+
+####Encode
+In order to adjust the Sudoku, I have to transfer the solution into a stream of numbers, so that the solution can act like genes and make the transformation by doing crossover and mutation, speak in another way, it is easier to operate.Espicially the phenomenon exists on most of creatures, so the combination of crossover, mutation and selection can lead the gene to a better state is undoubtful. Thus, the simulation about the gene leads solution to a better state, but detail reasons may still need to be explained in biologic way.  
+
+Inspired by ideas on the internet (mainly from blogs, wikipedia and piazza), I decide to design my encoding part as follows:
+
+	type Gene = [Maybe Int]
+	type Chr = [Gene]
+
+A example of Chr:
+
+	[[Just 1,Just 2,Just 4],[Just 5,Just 3,Just 6],[Just 9,Just 7].....]
+	
+In each **Gene**, the numbers are the candidates in each row that haven't been put into the whole solution.This makes the whole solution generated and limited in rows, all the crossover and mutation actions will only allowed to do in the particular row but not in the whole Chr. This ensures the **security** of the answers won't lost during any changes happened in Chr and optimise the **efficiency**. 
+####CrossOver
+CrossOver is resonable simple when the encode type is a **Chr**, because all I need to do is switch the two **gene** in mom and dad then produce to new children. But in this part, I choose to do two kinds of crossover: one is generally switch **gene**, another is switch part of the parent's **gene**. These two functions lead to different results and stand different meaning at here.  
+The first one, I see that as more **a spread of the mutation**, in other words, trying to get a better solution by doing the different combination.  
+	
+	mom:[[Just 1,Just 2,Just 4],[Just 5,Just 3,Just 6]......]
+	dad:[[Just 1,Just 4,Just 2],[Just 6,Just 5,Just 3]......]
+	child1:[[Just 1,Just 2,Just 4],[Just 6,Just 5,Just 3]......]
+	child2:[[Just 1,Just 4,Just 2],[Just 5,Just 3,Just 6].......]
+The second one, is seen as **another way of mutation**, it produces new possible anwsers in blocks. Since it is more a mutation, I consider to set a very low possibility on this function to be called or cancel this function after debugging.
+
+	swap Gene2 part(Just 5 and Just 3)
+	mom:[[Just 1,Just 2,Just 4],[Just 5,Just 3,Just 6,Just 4,Just 7]......]
+	dad:[[Just 1,Just 4,Just 2],[Just 6,Just 5,Just 3,Just 7,Just 4]......]
+	child1:[[Just 1,Just 2,Just 4],[Just 6,Just 5,Just 6,Just 4,Just 7]......]
+	child2:[[Just 1,Just 4,Just 2],[Just 5,Just 3,Just 3,Just 7,Just 4]......]
+	Adjust children to no-repeat Gene:
+	child1:[[Just 1,Just 2,Just 4],[Just 6,Just 5,Just 3,Just 4,Just 7]......]
+	child2:[[Just 1,Just 4,Just 2],[Just 5,Just 3,Just 6,Just 7,Just 4]......]
+In the first design of this GA, I forgot to do the adjustment and produced tons of bugs here. After I found that this **crossover** does the same with the **mutation** but much slower than mutation function when conducted as programs, I shutdown this function in the second design(the function is not called in actual running).  
+But from genetic view, both ways of the crossover exists in the real world, so from some perspectives it is still a resonable crossover method, though should be treated cautiously in the algorithm. 
+####Mutation
+In the mutation part, I **swap a pair of numbers** in a random block in order to achieve the result of 'mutation'.
+
+	e.g.
+	father:[[Just 1,Just 2,Just 4]......]
+	child:[[Just 1,Just 4,Just 2].......]
+In the current design, the function is forced to mutate in one random Chr's gene. There is no much problems when the population is large enough, but the frequency of the mutation may increase rapidly after several evolution.  
+At this stage, the population is set as 700, number for drop members is 10, assume in each gene there are 5 elements. Thus, mutation rate (genetic level) in each generation is as follows:  
+*:To make the trend clearer,I made the function become continous instead of being discrete.
+
+![](http://i.imgur.com/tsJNTuG.jpg)
+
+####Selection
+From the materials I get from the Internet, I found that the selection method plays an important role on whether the whole algorithm will achieve a local maximum or global maximum. A good selection should keeps most of the good candidates but not greedily pick the current best answers since it will reaches to the local maximum rapidly.  
+In the first design, the goal is only 'GA can be run as a Haskell program', so I simply choose **Roulette Wheel Selection(RWS)** as my selection strategy, though the only reason choosing this is that this method is easy to conduct.  
+This algorithm is described as randomly choosing the candidates by the candidates' accumlated possibility. In the selection part, I modify a litte bit, by doing the **inverse** of each candidate's possibility and **drop** the selected Chr. In this way, the efficiency may be optimised somehow.  
+		
+	--slect by using Roulette Wheel Selection
+	--count means the adjustable parameter for number of delated elements
+	sByRWS :: Int-> Double -> [(Chr,Double)] -> ([(Chr,Double)],Double)
+	sByRWS 0 seed lis = (lis,seed)
+	sByRWS count seed lis = sByRWS (count-1) nseed res
+	   where
+	      (res,nseed) =  rws seed (sortBy sortByW lis)
+
+####GA performance analysis
+After a series of tests and looking up support materials, I found that there were multiple reasons that may lead GA having a slow speed or couldn't reach the global solution(the reasons are explained from biology and computer science perpective):  
+1. The **potential good genes** are dropped in the early stage before spread by the crossover  
+2. The **potential good genes** are lost or broken by the crossOver
+3. The **elite genes** are dropped during the selection in a extremely low possibility
+4. The **Mutation rate** is too low that can't bring enough **potential genes** to select in the evolution
+5. The **Mutation rate** is too high that erase the **exist advance genes**
+
+####Population
+In the first version without the 'elite preservation' strategy, I have tested the population with 1,000 2,000 5,000 and 10,000.
+The start weight is 9, drop number in each iteration is 10,but different population leads to total different evolution speed and performance:  
+Among these tests, **4 tests get the 12** (of full score 27) as the maximum score, only the 1000 population got 11.  
+Talking about the **speed** reaching to the maximum, 10,000=2,000=1,000>700>5,000, the first three reaches the maximum at their third generation.  
+Then, stability should also be seen as an important creterion measruing the quilty of the parameters. It's easy to see that the #10,000 group got a high stability which maintains the maximum for 80+ iterations while the #700 group dropped quikly with only 1 iteration maintainance and never came to the maximum again. This indicates that #700 group was more a coinstance reaching a higher maximum than #1000 group.
+In conclusion, a larger population may have more potential generate a better gene and seperates in the future.
+####Selection Number (Drop number)
+In the first version without the 'elite preservation' strategy, I also tested the iteration with 100,50 and 10.
+All of their maximum weight point is 12, but the #10 group had a high stability by keeping the maximum weight for 7 iteration while other group only had one and appears much later than the #10 group.
+In conclusion, I think smaller selection number ensures the **'potential excellent gene'** can be spread by the crossover. Thus, the stability increases as the selection number is decreasing.
+####Elite Preservation
+From the materials, I found that simple selection may lead GA trapped in the local maximum. To solve this problem, an usual solution is taken as 'elite preservation', which preserves the best Chr (or several high rank Chrs) in each iteration.  
+In the second version, I put this strategy in the **selection** part, avoid the possibility of **elites being drop out**. Then I got a significant improve:  
+The maximum of the goup (population 2,000 and drop number 10) with 1 and 5 members preservation got 13 and 14 as their maximum number respectively. 
+####Parameter Selection and Improvement
+In GA, there are several adjustable parameters that can strongly affect the performance of the algorithm:  
+1.population  
+2.the number of candidates dropt in each iteration  
+3.the number of genes that mutate in each iteration  
+4.the multiplier and increment in the RNG
+5.a smaller iteration
+6.a higher mutation rate
+####GA optimisation and further improvement  
+After the second version of GA, I tried to increase the rate of the mutation to generate more **potential advance genes** for the group in the third version. It was under the condition of:  
+	
+	population:2000
+	RNG:*171 +71 
+	drop number:10
+	elite preservation:10
+In this case, the maximum weight in the evaluation **increases** to 16 from 14 when the mutation rate(number of Chrs doing the mutation in each iteration) is improved from 1 to 5. But the maximum **decreases** to 14 when the rate is adjusted to 8, which is **close to the drop number**. Thus, I suspect that the mutation rate is a good method to bring **new advance genes** into the group, but need a larger population to tolerant the mutation so that the mutation's **damage** to **exist advance genes** can be limited.  
+So I expanded the population and reduced the elite preservation, the parameters became as follows:  
+	
+	population:5000
+	RNG:*171 +71 
+	drop number:10
+	elite preservation:5
+As the result, GA got 16 as maximum but had a higher or stable distribution on high weights, which indicates that larger population made the group have higher opportunity to spread the **advance genes** by cross over. Then I slightly modify the parameters by increas the elite preservation but decrese the mutation rate:
+	
+	population:5000
+	RNG:*171 +71 
+	drop number:10
+	elite preservation:5
+Though the maximum still remains to be 16, the **quilty** of the evolution became much better since it had more high weight among best Chrs.
+
+Then I tried to boost the mutation rate by incresing it to 30 and 100 respectively, but the maximum **stuck** at 16 and didn't increase any more, which indicated that there is a local maximum trap and that I couldn't solve unless I try to other ways bringing **fresh genes** to the group.
+
+After that, I activated the second crossover method I mentioned above, trying to bring new genes to the group. However, this only makes the performance of the alogrithm worse, by unkown reasons. The maximum only reached 14 and the whole quilty of the group is obviously lower than others.
+
+At last, I also attempt to use the concept of **'disaster'**, dropping 10 'advance genes' at the middle stage in order to get rid of the local optima.
+
+	population:5000
+	RNG:*171 +71 
+	drop number:10
+	elite preservation:5
+The test is under the condition above, and was found that the maximum hadn't been reached again, since might be the reason that **all the advance genes were totally erased**, or **mutation was not powerful enough to bring enough good genes to the group to digest and spread**.  
+So I increse the mutation rate to 50, which brought the group a strong ability of **recover**. But at the same time, extremly high mutation rate erased the **potential advance gene** in the early stage, so the maximum didn't reach to 16 before the 'disaster'.  
+![](http://i.imgur.com/GJb7Xo0.jpg)
+Thus, I lowered down the mutation rate again but **put foward the 'disaster'** to remain more time for the 'recover' section. The result still didn't breakthrough the local optima, I doubt that it may need **more population** to suffer the disaster. All the results ditribution could be seen in the distribution graph, d-1, d-2 and d-3 represent 3 different strategies I tried above.  
+
+![](http://i.imgur.com/Q8sKlgH.jpg)
+**All in all, I believe there should be a mathmatic way optimising GA by evalutaing GA in some functions like the cost function for many machine learning algorithms. I had'n found a mathmatic method so far, so the adjusting time could be long.**
+#####Parallel
+The property of the cross over section makes it easy to be designed as parallel computing/programming. GA can be optimised by this significantlly espicially when the population is large.
+#####Other RNG algorithms
+**LCG** is simple and fast in generating random numbers, but the shortage is as mentioned above-less randomness and bad distribution. 
+####Debug & Design Reflection
+#####Modularisation
+When first designing the GA, I haven't consider much engineering strategies into this design. But gradually it was found that the algorithm could be more complex and larger than expected, so I seperate the algorithm into four modules, which  
+1.Make it more **readable**  
+2.**Safer** by using the interface
+
+
+-----
+###Reference
+[1] [A method taking GA to solve Sudoku](http://www.voidcn.com/blog/suolong123/article/p-1293961.html)  
+[2] [General introduction to Genetic Algorithm](https://en.wikipedia.org/wiki/Genetic_algorithm)  
+[3] [Pseudorandomness in Wikipedia](https://en.wikipedia.org/wiki/Pseudorandomness)   
+[4] [Elite preservation](http://www.cnhup.com/index.php/archives/elitist-preservation-in-genetic-algorithm/)  
+[5] [Genetic Algorithm Background Information](https://segmentfault.com/a/1190000004155021)
