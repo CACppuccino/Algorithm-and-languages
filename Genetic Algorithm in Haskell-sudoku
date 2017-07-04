@@ -1,6 +1,6 @@
 #Genetic Algorithm in Haskell
 #as sudoku solver
-#Author:Cup(CACuppuccino)
+#Author:[CACppuccino](https://github.com/CACppuccino)
 ####The author always keeps the copyright of the article and the experiment data
 ####This report is part of my school assignment
 In the GA part, I seperate the algorithm into 4 parts:Genetic,CrossOver,RNG and Mutation. Since the scale of the program is large, it is divided into four modules, for the convenience of debugging and logic constructing.  
